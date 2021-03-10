@@ -9,11 +9,11 @@ import (
 	"github.com/pkg/errors"
 	htmlTemplate "html/template"
 	"io"
-	"ios-signer-service/assets"
-	"ios-signer-service/config"
-	"ios-signer-service/ngrok"
-	"ios-signer-service/storage"
-	"ios-signer-service/util"
+	"ios-signer-service/src/assets"
+	"ios-signer-service/src/config"
+	"ios-signer-service/src/ngrok"
+	"ios-signer-service/src/storage"
+	"ios-signer-service/src/util"
 	"log"
 	"mime"
 	"net/http"
@@ -62,7 +62,7 @@ func main() {
 	config.Load(*configFile)
 	storage.Load()
 	if *ngrokPort != 0 {
-		publicUrl, err := ngrok.GetPublicUrl(*ngrokPort, "https")
+		publicUrl, err := ngrok.GetPublicUrl(*ngrokPort, "https", 10*time.Second)
 		if err != nil {
 			log.Fatalln(err)
 		}

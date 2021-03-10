@@ -10,16 +10,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"io"
 	"io/ioutil"
-	"ios-signer-service/builders"
-	"ios-signer-service/config"
-	"ios-signer-service/storage"
-	"ios-signer-service/util"
+	"ios-signer-service/src/builders"
+	"ios-signer-service/src/config"
+	"ios-signer-service/src/storage"
+	"ios-signer-service/src/util"
 	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 var (
@@ -88,11 +89,17 @@ func TestMain(m *testing.M) {
 		},
 		BuilderKey: builderKey,
 	}
-
 	storage.Load()
-	go serve(serveHost, servePort)
-	go startWorkflowServer(workflowPort)
 
+	go startWorkflowServer(workflowPort)
+	if err := util.WaitForServer(fmt.Sprintf("http://localhost:%d", workflowPort), 5*time.Second); err != nil {
+		log.Fatalln(err)
+	}
+
+	go serve(serveHost, servePort)
+	if err := util.WaitForServer(fmt.Sprintf("http://localhost:%d", servePort), 5*time.Second); err != nil {
+		log.Fatalln(err)
+	}
 	m.Run()
 }
 

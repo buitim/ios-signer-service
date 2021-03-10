@@ -4,13 +4,34 @@ import (
 	"fmt"
 	"github.com/ViRb3/sling/v2"
 	"github.com/pkg/errors"
-	"ios-signer-service/util"
+	"ios-signer-service/src/util"
 	"strings"
+	"time"
 )
 
-func GetPublicUrl(ngrokPort uint64, proto string) (string, error) {
+func GetPublicUrl(ngrokPort uint64, proto string, timeout time.Duration) (string, error) {
+	timer := time.After(timeout)
+	var url string
+	var err error
+	for len(timer) < 1 {
+		url, err = getPublicUrl(ngrokPort, proto, timeout)
+		if err == nil {
+			return url, nil
+		} else if !errors.Is(err, ErrTunnelNotFound) {
+			return "", err
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return "", err
+}
+
+func getPublicUrl(ngrokPort uint64, proto string, timeout time.Duration) (string, error) {
+	ngrokUrl := fmt.Sprintf("http://localhost:%d/api/tunnels", ngrokPort)
+	if err := util.WaitForServer(ngrokUrl, timeout); err != nil {
+		return "", errors.WithMessage(err, "connecting to ngrok")
+	}
 	var tunnels Tunnels
-	response, err := sling.New().Get(fmt.Sprintf("http://localhost:%d/api/tunnels", ngrokPort)).ReceiveSuccess(&tunnels)
+	response, err := sling.New().Get(ngrokUrl).ReceiveSuccess(&tunnels)
 	if err != nil {
 		return "", err
 	}
@@ -22,8 +43,10 @@ func GetPublicUrl(ngrokPort uint64, proto string) (string, error) {
 			return tunnel.PublicURL, nil
 		}
 	}
-	return "", errors.New("tunnel not found")
+	return "", ErrTunnelNotFound
 }
+
+var ErrTunnelNotFound = errors.New("tunnel not found")
 
 type Tunnels struct {
 	Tunnels []Tunnel `json:"tunnels"`
