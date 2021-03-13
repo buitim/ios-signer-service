@@ -18,14 +18,6 @@
             color: inherit;
             text-decoration: none;
         }
-
-        .vertical-center {
-            margin: 0;
-        }
-
-        .jumbotron {
-            background-color: transparent !important;
-        }
     </style>
 </head>
 <body>
@@ -53,14 +45,46 @@
                         <input class="form-control" type="file" id="formFileSelect" name="{{.FormFile}}" required>
                     </div>
                     <div class="mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-8">
                             <label for="formProfile" class="form-label">Signing profile</label>
-                            <select class="form-select" id="formProfile" name="{{.FormProfileName}}" required>
+                            <select class="form-select" id="formProfile" name="{{.FormProfileId}}" required>
                                 <option selected disabled value="">Choose...</option>
                                 {{range $_, $profile := .Profiles}}
-                                    <option>{{$profile.Name}}</option>
+                                    <option value="{{$profile.Id}}"
+                                            account="{{$profile.IsAccount}}">{{$profile.Name}}</option>
                                 {{end}}
                             </select>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="col-md-9">
+                            <label class="form-label">Bundle identifier</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="formIdOriginal" name="{{.FormId}}"
+                                       value="{{.FormIdOriginal}}" checked>
+                                <label style="display: inline" class="form-check-label" for="formIdOriginal">
+                                    Use the app's original bundle ID
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="formIdProv" name="{{.FormId}}"
+                                       value="{{.FormIdProv}}">
+                                <label style="display: inline" class="form-check-label" for="formIdProv">
+                                    Use provisioning profile's application ID
+                                </label>
+                                <a style="color: blue" href="#" data-bs-toggle="tooltip" data-bs-placement="right"
+                                   title="Fixes entitlements on explicit provisioning profiles.
+                                    For each profile, only one app signed this way can be installed at a time.">?</a>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="formIdCustom" name="{{.FormId}}"
+                                       value="{{.FormIdCustom}}">
+                                <label style="display: inline" class="form-check-label" for="formIdCustom">
+                                    Use custom:
+                                </label>
+                                <input type="text" class="form-control" name="{{.FormIdCustomText}}" disabled
+                                       id="formIdCustomText" placeholder="com.custom.app" required/>
+                            </div>
                         </div>
                     </div>
                     <div class="mb-0">
@@ -94,16 +118,6 @@
                             <a style="color: blue" href="#" data-bs-toggle="tooltip" data-bs-placement="right"
                                title="Allows you to access the app's data via iTunes and other file managers.">?</a>
                         </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="formAlignAppId"
-                                   name="{{.FormAlignAppId}}">
-                            <label style="display: inline" class="form-check-label" for="formAlignAppId">
-                                Set bundle ID to provisioning profile's app ID
-                            </label>
-                            <a style="color: blue" href="#" data-bs-toggle="tooltip" data-bs-placement="right"
-                               title="Makes the app match an explicit provisioning profile, allowing entitlements to work.
-                               For each profile, only one app signed this way can be installed at a time.">?</a>
-                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -115,44 +129,51 @@
         </div>
     </div>
 </div>
-<div class="jumbotron vertical-center">
-    <div class="container py-4 py-xxl-5 py-xl-5 px-4">
-        <div class="row" data-masonry='{"percentPosition": true, "horizontalOrder": true}'>
-            {{range $_, $app := .Apps}}
-                <div class="col-sm-6 col-lg-3 p-2">
-                    <div class="card text-white {{if $app.IsSigned}} bg-success {{else}} bg-primary {{end}}">
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col">
-                                    <h5 class="card-title" style="word-break: break-all">{{$app.Name}}</h5>
-                                </div>
-                                <div class="col-auto">
-                                    <a class="btn-close btn-close-white p-2" href="{{$app.DeleteUrl}}"></a>
-                                </div>
+<div class="container py-4 py-xxl-5 py-xl-5 px-4">
+    <div class="row" data-masonry='{"percentPosition": true, "horizontalOrder": true}'>
+        {{range $_, $app := .Apps}}
+            <div class="col-sm-6 col-lg-3 p-2">
+                <div class="card text-white
+                    {{if eq $app.Status 0 }} bg-primary
+                    {{else if eq $app.Status 1 }} bg-success
+                    {{else if eq $app.Status 2 }} bg-danger
+                    {{end}}">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col">
+                                <h5 class="card-title" style="word-break: break-all">{{$app.Name}}</h5>
                             </div>
-                            <p class="card-text mb-2">
-                                Profile: {{$app.ProfileName}}
-                                <br>
-                                {{if $app.IsSigned}}Signed{{else}}Processing{{end}}
-                            </p>
-                            <div class="row justify-content-end">
-                                <div class="col-auto">
-                                    {{if $app.IsSigned}}
-                                        <a class="btn btn-outline-light ms-auto me-2 mt-2"
-                                           href="itms-services://?action=download-manifest&url={{$app.ManifestUrl}}">Install</a>
-                                        <a class="btn btn-outline-light ms-0 mt-2"
-                                           href="{{$app.DownloadUrl}}">Download</a>
-                                    {{else}}
-                                        <a class="btn btn-outline-light ms-auto mt-2 {{if lt (len $app.WorkflowUrl) 1}}disabled{{end}}"
-                                           href="{{$app.WorkflowUrl}}">Status</a>
-                                    {{end}}
-                                </div>
+                            <div class="col-auto">
+                                <a class="btn-close btn-close-white p-2" href="{{$app.DeleteUrl}}"></a>
+                            </div>
+                        </div>
+                        <p class="card-text mb-2">
+                            {{if eq $app.Status 1 }} {{$app.BundleId}} <br> {{end}}
+                            {{$app.ProfileName}} <br>
+                            {{if eq $app.Status 0 }} Processing
+                            {{else if eq $app.Status 1 }} Signed
+                            {{else if eq $app.Status 2 }} Failed
+                            {{end}}
+                            <br>
+                            {{$app.ModTime}}
+                        </p>
+                        <div class="row justify-content-end">
+                            <div class="col-auto">
+                                {{if eq $app.Status 1 }}
+                                    <a class="btn btn-outline-light ms-auto me-2 mt-2"
+                                       href="itms-services://?action=download-manifest&url={{$app.ManifestUrl}}">Install</a>
+                                    <a class="btn btn-outline-light ms-0 mt-2"
+                                       href="{{$app.DownloadUrl}}">Download</a>
+                                {{else}}
+                                    <a class="btn btn-outline-light ms-auto mt-2 {{if lt (len $app.WorkflowUrl) 1}}disabled{{end}}"
+                                       href="{{$app.WorkflowUrl}}">Status</a>
+                                {{end}}
                             </div>
                         </div>
                     </div>
                 </div>
-            {{end}}
-        </div>
+            </div>
+        {{end}}
     </div>
 </div>
 </body>
@@ -169,6 +190,11 @@
         keyboard: false
     })
     const btnModalClose = document.getElementById('btnModalClose')
+    const formProfile = document.getElementById('formProfile')
+    const formIdOriginal = document.getElementById('formIdOriginal')
+    const formIdProv = document.getElementById('formIdProv')
+    const formIdCustom = document.getElementById('formIdCustom')
+    const formIdCustomText = document.getElementById('formIdCustomText')
     let modalVisible = false
 
     fileSelect.addEventListener("click", function () {
@@ -197,6 +223,26 @@
             uploadForm.submit()
         }, 200)
     });
+    formProfile.addEventListener("change", function () {
+        const selectedOption = formProfile.options[formProfile.selectedIndex]
+        if (selectedOption.getAttribute('account') === 'true') {
+            if (formIdProv.checked) {
+                formIdOriginal.checked = true
+            }
+            formIdProv.setAttribute('disabled', 'true')
+        } else {
+            formIdProv.removeAttribute('disabled')
+        }
+    })
+    document.querySelectorAll('input[name="{{.FormId}}"]').forEach(function (a) {
+        a.addEventListener("change", function () {
+            if (formIdCustom.checked) {
+                formIdCustomText.removeAttribute('disabled')
+            } else {
+                formIdCustomText.setAttribute('disabled', 'true')
+            }
+        })
+    })
 
     // enable all tooltips
     let tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))

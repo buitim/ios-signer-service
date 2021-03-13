@@ -29,15 +29,15 @@ var (
 		uuid.NewString(): uuid.NewString(),
 		uuid.NewString(): uuid.NewString(),
 	}
-	builderKey   = uuid.NewString()
-	saveDir      = ""
-	profileId    = uuid.NewString()
-	profileCert  = uuid.NewString()
-	profileName  = uuid.NewString()
-	profilePass  = uuid.NewString()
-	profileProv  = uuid.NewString()
-	unsignedData = uuid.NewString()
-	signedData   = uuid.NewString()
+	builderKey      = uuid.NewString()
+	saveDir         = ""
+	profileId       = uuid.NewString()
+	profileCert     = uuid.NewString()
+	profileName     = uuid.NewString()
+	profileCertPass = uuid.NewString()
+	profileProv     = uuid.NewString()
+	unsignedData    = uuid.NewString()
+	signedData      = uuid.NewString()
 )
 
 func TestMain(m *testing.M) {
@@ -58,8 +58,8 @@ func TestMain(m *testing.M) {
 	}
 	contentMap := map[string]string{
 		"cert.p12":             profileCert,
+		"cert_pass.txt":        profileCertPass,
 		"name.txt":             profileName,
-		"pass.txt":             profilePass,
 		"prov.mobileprovision": profileProv,
 	}
 	for key, val := range contentMap {
@@ -191,7 +191,7 @@ func uploadSignedFile(t *testing.T, returnId string) {
 	assert.NoError(t, err)
 	field.Write([]byte(signedData))
 	w.Close()
-	req, err := http.NewRequest("POST", config.Current.ServerUrl+"/jobs/"+returnId, &b)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/jobs/%s/signed", config.Current.ServerUrl, returnId), &b)
 	assert.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+builderKey)
 	req.Header.Set("Content-Type", w.FormDataContentType())
@@ -246,11 +246,11 @@ func uploadUnsigned(t *testing.T) {
 	w := multipart.NewWriter(&b)
 
 	formData := map[string][]string{
-		"file":         {"file.ipa", unsignedData},
-		"profile_name": {profileName},
-		"all_devices":  {"true"},
-		"app_debug":    {"true"},
-		"file_share":   {"true"},
+		formNames.FormFile:       {"file.ipa", unsignedData},
+		formNames.FormProfileId:  {profileId},
+		formNames.FormAllDevices: {"true"},
+		formNames.FormAppDebug:   {"true"},
+		formNames.FormFileShare:  {"true"},
 	}
 	for key, val := range formData {
 		var field io.Writer

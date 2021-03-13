@@ -42,6 +42,7 @@ type File struct {
 	SaveDir             string    `yaml:"save_dir"`
 	CleanupMins         uint64    `yaml:"cleanup_mins"`
 	CleanupIntervalMins uint64    `yaml:"cleanup_interval_mins"`
+	SignTimeoutMins     uint64    `yaml:"sign_timeout_mins"`
 	BasicAuth           BasicAuth `yaml:"basic_auth"`
 }
 
@@ -71,7 +72,7 @@ func createDefaultFile() *File {
 				SecretsUrl:  "http://localhost:1234/secrets",
 				TriggerBody: "hello",
 				Headers: map[string]string{
-					"Authroziation": "Token YOUR_TOKEN",
+					"Authorization": "Token YOUR_TOKEN",
 				},
 				AttemptHTTP2: true,
 			},
@@ -80,6 +81,7 @@ func createDefaultFile() *File {
 		SaveDir:             "data",
 		CleanupMins:         60 * 24 * 7,
 		CleanupIntervalMins: 30,
+		SignTimeoutMins:     10,
 		BasicAuth: BasicAuth{
 			Enable:   false,
 			Username: "admin",

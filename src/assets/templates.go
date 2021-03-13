@@ -1,33 +1,49 @@
 package assets
 
-import "time"
-
 type App struct {
 	Id          string
-	IsSigned    bool
+	Status      int
 	Name        string
-	ModTime     time.Time
+	ModTime     string
 	WorkflowUrl string
 	ManifestUrl string
 	DownloadUrl string
 	DeleteUrl   string
 	ProfileName string
+	BundleId    string
 }
 
+const (
+	AppStatusProcessing = 0
+	AppStatusSigned     = 1
+	AppStatusFailed     = 2
+)
+
 type Profile struct {
-	Id   string
-	Name string
+	Id        string
+	Name      string
+	IsAccount bool
+}
+
+type FormNames struct {
+	FormFile         string
+	FormProfileId    string
+	FormAppDebug     string
+	FormAllDevices   string
+	FormFileShare    string
+	FormToken        string
+	FormId           string
+	FormIdOriginal   string
+	FormIdProv       string
+	FormIdCustom     string
+	FormIdCustomText string
+	FormBundleId     string
 }
 
 type IndexData struct {
-	Apps            []App
-	Profiles        []Profile
-	FormFile        string
-	FormProfileName string
-	FormAppDebug    string
-	FormAllDevices  string
-	FormFileShare   string
-	FormAlignAppId  string
+	Apps     []App
+	Profiles []Profile
+	FormNames
 }
 
 type ManifestData struct {

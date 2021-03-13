@@ -22,14 +22,20 @@ import (
 	"time"
 )
 
-var (
-	formFile        = "file"
-	formProfileName = "profile_name"
-	formAllDevices  = "all_devices"
-	formAppDebug    = "app_debug"
-	formFileShare   = "file_share"
-	formAlignAppId  = "align_app_id"
-)
+var formNames = assets.FormNames{
+	FormFile:         "file",
+	FormProfileId:    "profile_id",
+	FormAppDebug:     "all_devices",
+	FormAllDevices:   "app_debug",
+	FormFileShare:    "file_share",
+	FormToken:        "align_app_id",
+	FormId:           "id",
+	FormIdOriginal:   "id_original",
+	FormIdProv:       "id_prov",
+	FormIdCustom:     "id_custom",
+	FormIdCustomText: "id_custom_text",
+	FormBundleId:     "bundle_id",
+}
 
 func cleanupApps() error {
 	apps, err := storage.Apps.GetAll()
@@ -114,14 +120,17 @@ func serve(host string, port uint64) {
 		return s == config.Current.BuilderKey, nil
 	})
 
-	e.GET("/", index, basicAuth)
+	e.GET("/", renderIndex, basicAuth)
 	e.GET("/favicon.png", getFavIcon, basicAuth)
 	e.POST("/apps", uploadUnsignedApp, basicAuth)
 	e.GET("/apps/:id/signed", appResolver(getSignedApp))
 	e.GET("/apps/:id/manifest", appResolver(getManifest))
 	e.GET("/apps/:id/delete", appResolver(deleteApp), basicAuth)
+	e.GET("/apps/:id/2fa", appResolver(render2FAPage), basicAuth)
+	e.POST("/apps/:id/2fa", appResolver(set2FA), basicAuth)
 	e.GET("/jobs", getLastJob, workflowKeyAuth)
-	e.POST("/jobs/:id", uploadJobResult, workflowKeyAuth)
+	e.GET("/jobs/:id/2fa", jobResolver(get2FA), workflowKeyAuth)
+	e.POST("/jobs/:id/signed", jobResolver(uploadSignedApp), workflowKeyAuth)
 
 	e.Logger.Fatal(e.Start(fmt.Sprintf("%s:%d", host, port)))
 }
@@ -131,16 +140,15 @@ func getFavIcon(c echo.Context) error {
 	return nil
 }
 
-func uploadJobResult(c echo.Context) error {
-	appId, ok := storage.Jobs.ResolveReturnJob(c.Param("id"))
-	if !ok {
-		return c.NoContent(404)
+func uploadSignedApp(c echo.Context, job *storage.ReturnJob) error {
+	if !storage.Jobs.DeleteById(job.Id) {
+		return errors.New("unable to delete return job " + job.Id)
 	}
-	app, ok := storage.Apps.Get(appId)
+	app, ok := storage.Apps.Get(job.AppId)
 	if !ok {
-		return errors.New(fmt.Sprintf("return job appid %s not resolved", appId))
+		return errors.New(fmt.Sprintf("return job %s appid %s not resolved", job.Id, job.AppId))
 	}
-	header, err := c.FormFile(formFile)
+	header, err := c.FormFile(formNames.FormFile)
 	if err != nil {
 		return err
 	}
@@ -149,10 +157,19 @@ func uploadJobResult(c echo.Context) error {
 		return err
 	}
 	defer file.Close()
-	if err := app.SetSigned(file); err != nil {
+	if err := app.SetSigned(file, c.FormValue(formNames.FormBundleId)); err != nil {
 		return err
 	}
 	return c.NoContent(200)
+}
+
+func get2FA(c echo.Context, job *storage.ReturnJob) error {
+	code := job.TwoFactorCode.Load()
+	if code == "" {
+		return c.NoContent(404)
+	} else {
+		return c.String(200, code)
+	}
 }
 
 func appResolver(handler func(echo.Context, storage.App) error) func(c echo.Context) error {
@@ -166,14 +183,38 @@ func appResolver(handler func(echo.Context, storage.App) error) func(c echo.Cont
 	}
 }
 
+func jobResolver(handler func(echo.Context, *storage.ReturnJob) error) func(c echo.Context) error {
+	return func(c echo.Context) error {
+		id := c.Param("id")
+		job, ok := storage.Jobs.GetById(id)
+		if !ok {
+			return c.NoContent(404)
+		}
+		return handler(c, job)
+	}
+}
+
 func getLastJob(c echo.Context) error {
-	if err := storage.Jobs.WriteLastJob(c.Response()); errors.Is(err, storage.ErrNotFound) {
+	if err := storage.Jobs.TakeLastJob(c.Response()); errors.Is(err, storage.ErrNotFound) {
 		return c.NoContent(404)
 	} else if err != nil {
 		return err
 	}
 	c.Response().Header().Set("Content-Type", mime.TypeByExtension(".tar"))
 	return c.NoContent(200)
+}
+
+func render2FAPage(c echo.Context, _ storage.App) error {
+	return c.HTML(200, assets.TwoFactorHtml)
+}
+
+func set2FA(c echo.Context, app storage.App) error {
+	job, ok := storage.Jobs.GetByAppId(app.GetId())
+	if !ok {
+		return errors.New("no job found for app " + app.GetId())
+	}
+	job.TwoFactorCode.Store(c.FormValue("formToken"))
+	return c.Redirect(302, "/")
 }
 
 func deleteApp(c echo.Context, app storage.App) error {
@@ -232,12 +273,12 @@ func writeFileResponse(c echo.Context, file io.ReadSeeker, app storage.App) erro
 }
 
 func uploadUnsignedApp(c echo.Context) error {
-	profileName := c.FormValue(formProfileName)
-	profile, ok := storage.Profiles.GetByName(profileName)
+	profileId := c.FormValue(formNames.FormProfileId)
+	profile, ok := storage.Profiles.GetById(profileId)
 	if !ok {
-		return errors.New("no profile with id " + profileName)
+		return errors.New("no profile with id " + profileId)
 	}
-	header, err := c.FormFile(formFile)
+	header, err := c.FormFile(formNames.FormFile)
 	if err != nil {
 		return err
 	}
@@ -247,44 +288,51 @@ func uploadUnsignedApp(c echo.Context) error {
 	}
 	defer file.Close()
 	signArgs := ""
-	if c.FormValue(formAllDevices) != "" {
+	if c.FormValue(formNames.FormAllDevices) != "" {
 		signArgs += " -a"
 	}
-	if c.FormValue(formAppDebug) != "" {
+	if c.FormValue(formNames.FormAppDebug) != "" {
 		signArgs += " -d"
 	}
-	if c.FormValue(formFileShare) != "" {
+	if c.FormValue(formNames.FormFileShare) != "" {
 		signArgs += " -s"
 	}
-	if c.FormValue(formAlignAppId) != "" {
+	idType := c.FormValue(formNames.FormId)
+	userBundleId := c.FormValue(formNames.FormIdCustomText)
+	if idType == formNames.FormIdProv {
 		signArgs += " -n"
+	} else if idType == formNames.FormIdCustom {
+		signArgs += " -b " + userBundleId
 	}
 	app, err := storage.Apps.New(file, header.Filename, profile, signArgs)
 	if err != nil {
 		return err
 	}
-	storage.Jobs.MakeSignJob(app.GetId(), profile.GetId())
+	storage.Jobs.MakeSignJob(app.GetId(), userBundleId, profile.GetId())
 	if err := config.Current.Builder.Trigger(); err != nil {
 		return err
 	}
 	if err := app.SetWorkflowUrl(config.Current.Builder.GetStatusUrl()); err != nil {
 		return err
 	}
-	return c.Redirect(302, "/")
+	isAccount, err := profile.IsAccount()
+	if err != nil {
+		return err
+	}
+	if isAccount {
+		return c.Redirect(302, fmt.Sprintf("/apps/%s/2fa", app.GetId()))
+	} else {
+		return c.Redirect(302, "/")
+	}
 }
 
-func index(c echo.Context) error {
+func renderIndex(c echo.Context) error {
 	apps, err := storage.Apps.GetAll()
 	if err != nil {
 		return err
 	}
 	data := assets.IndexData{
-		FormFile:        formFile,
-		FormProfileName: formProfileName,
-		FormAllDevices:  formAllDevices,
-		FormAppDebug:    formAppDebug,
-		FormFileShare:   formFileShare,
-		FormAlignAppId:  formAlignAppId,
+		FormNames: formNames,
 	}
 	for _, app := range apps {
 		isSigned, err := app.IsSigned()
@@ -303,6 +351,7 @@ func index(c echo.Context) error {
 		if err != nil {
 			log.Println(errors.WithMessage(err, "get workflow url"))
 		}
+		bundleId, _ := app.GetBundleId()
 		profileId, err := app.GetProfileId()
 		if err != nil {
 			log.Println(errors.WithMessage(err, "get profile id"))
@@ -317,14 +366,22 @@ func index(c echo.Context) error {
 			log.Println(errors.WithMessage(err, "get profile"))
 			profileName = "unknown"
 		}
+		appTimeoutTime := modTime.Add(time.Duration(config.Current.SignTimeoutMins) * time.Minute)
+		status := assets.AppStatusFailed
+		if isSigned {
+			status = assets.AppStatusSigned
+		} else if time.Now().Before(appTimeoutTime) {
+			status = assets.AppStatusProcessing
+		}
 
 		data.Apps = append(data.Apps, assets.App{
 			Id:          app.GetId(),
-			IsSigned:    isSigned,
+			Status:      status,
 			Name:        name,
-			ModTime:     modTime,
+			ModTime:     modTime.Format(time.RFC822),
 			WorkflowUrl: workflowUrl,
 			ProfileName: profileName,
+			BundleId:    bundleId,
 			ManifestUrl: util.JoinUrlsPanic(config.Current.ServerUrl, "apps", app.GetId(), "manifest"),
 			DownloadUrl: util.JoinUrlsPanic(config.Current.ServerUrl, "apps", app.GetId(), "signed"),
 			DeleteUrl:   util.JoinUrlsPanic(config.Current.ServerUrl, "apps", app.GetId(), "delete"),
@@ -339,9 +396,14 @@ func index(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		isAccount, err := profile.IsAccount()
+		if err != nil {
+			return err
+		}
 		data.Profiles = append(data.Profiles, assets.Profile{
-			Id:   profile.GetId(),
-			Name: name,
+			Id:        profile.GetId(),
+			Name:      name,
+			IsAccount: isAccount,
 		})
 	}
 	t, err := htmlTemplate.New("").Parse(assets.IndexHtml)

@@ -8,28 +8,34 @@ import (
 )
 
 func newJobResolver() *JobResolver {
-	return &JobResolver{idToReturnJob: map[string]returnJob{}}
+	return &JobResolver{
+		idToReturnJobMap:    map[string]*ReturnJob{},
+		appIdToReturnJobMap: map[string]*ReturnJob{},
+	}
 }
 
 type JobResolver struct {
-	mu            sync.Mutex
-	signJobs      []signJob
-	idToReturnJob map[string]returnJob
+	mu                  sync.Mutex
+	signJobs            []signJob
+	idToReturnJobMap    map[string]*ReturnJob
+	appIdToReturnJobMap map[string]*ReturnJob
 }
 
-func (r *JobResolver) MakeSignJob(appId string, profileId string) {
+// User bundle ID is unused if the profile is not an account.
+func (r *JobResolver) MakeSignJob(appId string, userBundleId string, profileId string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.signJobs = append(r.signJobs, signJob{
-		ts:        time.Now(),
-		appId:     appId,
-		profileId: profileId,
+		ts:           time.Now(),
+		appId:        appId,
+		userBundleId: userBundleId,
+		profileId:    profileId,
 	})
 }
 
 var ErrNotFound = errors.New("not found")
 
-func (r *JobResolver) WriteLastJob(writer io.Writer) error {
+func (r *JobResolver) TakeLastJob(writer io.Writer) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.signJobs) < 1 {
@@ -44,14 +50,28 @@ func (r *JobResolver) WriteLastJob(writer io.Writer) error {
 	if err != nil {
 		return errors.WithMessage(err, "write archive")
 	}
-	r.idToReturnJob[returnJobId] = returnJob{time.Now(), job.appId}
+	returnJob := ReturnJob{Id: returnJobId, Ts: time.Now(), AppId: job.appId}
+	r.idToReturnJobMap[returnJobId] = &returnJob
+	r.appIdToReturnJobMap[job.appId] = &returnJob
 	return nil
 }
 
-func (r *JobResolver) ResolveReturnJob(id string) (string, bool) {
-	job, ok := r.idToReturnJob[id]
-	if ok {
-		delete(r.idToReturnJob, id)
+func (r *JobResolver) GetById(id string) (*ReturnJob, bool) {
+	job, ok := r.idToReturnJobMap[id]
+	return job, ok
+}
+
+func (r *JobResolver) GetByAppId(id string) (*ReturnJob, bool) {
+	job, ok := r.appIdToReturnJobMap[id]
+	return job, ok
+}
+
+func (r *JobResolver) DeleteById(id string) bool {
+	job, ok := r.idToReturnJobMap[id]
+	if !ok {
+		return false
 	}
-	return job.appId, ok
+	delete(r.appIdToReturnJobMap, job.AppId)
+	delete(r.idToReturnJobMap, id)
+	return true
 }

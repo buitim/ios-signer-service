@@ -4,20 +4,24 @@ import (
 	"archive/tar"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
 	"io"
 	"log"
 	"time"
 )
 
 type signJob struct {
-	ts        time.Time
-	appId     string
-	profileId string
+	ts           time.Time
+	appId        string
+	userBundleId string
+	profileId    string
 }
 
-type returnJob struct {
-	ts    time.Time
-	appId string
+type ReturnJob struct {
+	Id            string
+	Ts            time.Time
+	AppId         string
+	TwoFactorCode atomic.String
 }
 
 func (j *signJob) writeArchive(writer io.Writer) (string, error) {
@@ -36,18 +40,16 @@ func (j *signJob) writeArchive(writer io.Writer) (string, error) {
 		return "", errors.WithMessage(err, "get app args")
 	}
 	id := uuid.NewString()
-	files := []fileGenerator{
-		{name: "unsigned.ipa", f1: app.GetUnsigned},
-		{name: "prov.mobileprovision", f1: profile.GetProv},
-		{name: "cert.p12", f1: profile.GetCert},
-		{name: "pass.txt", f2: profile.GetPassword},
-		{name: "id.txt", f2: func() (string, error) {
-			return id, nil
-		}},
-		{name: "args.txt", f2: func() (string, error) {
-			return args, nil
-		}},
+	files, err := profile.GetFiles()
+	if err != nil {
+		return "", errors.WithMessage(err, "get profile files")
 	}
+	files = append(files, []fileGetter{
+		{name: "unsigned.ipa", f1: app.GetUnsigned},
+		{name: "id.txt", f2: func() (string, error) { return id, nil }},
+		{name: "args.txt", f2: func() (string, error) { return args, nil }},
+		{name: "user_bundle_id.txt", f2: func() (string, error) { return j.userBundleId, nil }},
+	}...)
 	for _, file := range files {
 		if err := tarPackage(w, &file); err != nil {
 			return "", errors.WithMessage(err, "tar package")
@@ -56,13 +58,7 @@ func (j *signJob) writeArchive(writer io.Writer) (string, error) {
 	return id, nil
 }
 
-type fileGenerator struct {
-	name string
-	f1   func() (ReadonlyFile, error)
-	f2   func() (string, error)
-}
-
-func tarPackage(w *tar.Writer, fileGen *fileGenerator) error {
+func tarPackage(w *tar.Writer, fileGen *fileGetter) error {
 	if fileGen.f1 != nil {
 		file, err := fileGen.f1()
 		if err != nil {
@@ -81,7 +77,7 @@ func tarPackage(w *tar.Writer, fileGen *fileGenerator) error {
 			return errors.WithMessage(err, "write bytes")
 		}
 	} else {
-		log.Fatalln("badly initialized fileGenerator")
+		log.Fatalln("badly initialized fileGetter")
 	}
 	return nil
 }

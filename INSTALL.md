@@ -50,7 +50,7 @@ builder:
     secrets_url: http://localhost:1234/secrets
     trigger_body: hello
     headers:
-      Authroziation: Token YOUR_TOKEN
+      Authorization: Token YOUR_TOKEN
     attempt_http2: true
 # the public address of your server, used to build URLs for the website and builder
 # must be valid HTTPS or OTA won't work!
@@ -62,6 +62,9 @@ save_dir: data
 cleanup_mins: 10080
 # how often does the cleanup job run
 cleanup_interval_mins: 30
+# apps older than this time will be marked as failed
+# should match the job timeout in the builder
+sign_timeout_mins: 10
 # protects the web ui with a username and password
 # definitely enable if you left "server_url" empty and are using ngrok
 basic_auth:
@@ -80,19 +83,38 @@ You need to add at least one code signing profile.
 4. Put your signing profile's files inside it
 5. Repeat these steps for each signing profile that you want to add
 
-The final directory structure will look like this:
+There are two types of signing profiles, each with different requirements. If you can, use a certificate with provisioning profile - it will save you from a lot of limitations. For more information and help, check out the [FAQ page](FAQ.md). The file structure is as follows:
 
-```
-data
-|____profiles
-| |____my_profile                # any unique string that you want
-| | |____cert.p12                # the signing certificate
-| | |____pass.txt                # the signing certificate's password
-| | |____name.txt                # a name to show in the web interface
-| | |____prov.mobileprovision    # the signing provisioning profile
-| |____my_other_profile
-| | |____...
-```
+- Certificate + provisioning profile (`cert.p12`, `cert_pass.txt`, `prov.mobileprovision`)
+
+  ```
+  data
+  |____profiles
+  | |____my_profile                # any unique string that you want
+  | | |____cert.p12                # the signing certificate
+  | | |____cert_pass.txt           # the signing certificate's password
+  | | |____name.txt                # a name to show in the web interface
+  | | |____prov.mobileprovision    # the signing provisioning profile
+  | |____my_other_profile
+  | | |____...
+  ```
+
+- Developer account (`cert.p12`, `cert_pass.txt`, `account_name.txt`, `account_pass.txt`)
+
+  Make sure to read the [FAQ page](FAQ.md) and understand the limitations!
+
+  ```
+  data
+  |____profiles
+  | |____my_profile                # any unique string that you want
+  | | |____cert.p12                # the signing certificate
+  | | |____cert_pass.txt           # the signing certificate's password
+  | | |____name.txt                # a name to show in the web interface
+  | | |____account_name.txt        # the developer account's name (email)
+  | | |____account_pass.txt        # the developer account's password
+  | |____my_other_profile
+  | | |____...
+  ```
 
 That's all the initial configuration! To recap, you now have the following configuration files:
 
